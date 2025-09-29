@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import jwt from 'jsonwebtoken';
 
 // Load environment variables
 dotenv.config();
@@ -113,6 +114,32 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Static files for uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Simple JWT auth middleware for admin-only routes
+const authMiddleware = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ message: 'No token provided' });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret');
+    req.user = payload;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+// Auth route: POST /api/auth/login
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body || {};
+  const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+  const ADMIN_PASS = process.env.ADMIN_PASS || 'admin';
+  if (username === ADMIN_USER && password === ADMIN_PASS) {
+    const token = jwt.sign({ role: 'admin', username: ADMIN_USER }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '7d' });
+    return res.json({ token });
+  }
+  return res.status(401).json({ message: 'Invalid credentials' });
+});
 
 // Routes
 app.use('/api/subjects', subjectRoutes);
